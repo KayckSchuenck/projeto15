@@ -81,12 +81,20 @@ export async function postRentals(req,res){
     } 
 }
 
-export async function deleteRentals(req,res){
-    const {id}=req.params
-    const {rows:rentExists}=await connection.query(`
-    SELECT id,returnDate FROM rentals WHERE id=$1`,[id])
-    if(rentExists.length===0) return res.sendStatus(404)
-    if(!rentExists[0].returnDate) return res.sendStatus(400)
+export async function finishRentals(req,res){
+    const {exists}=res.locals
+    if(exists.returnDate) return res.sendStatus(400)
+    const currentDate=dayjs().format("YYYY-MM-DD")
+    const pricePerDay=exists.originalPrice/exists.daysRented
+    const delayFee=exists.rentDate.diff(currentDate,'day')*pricePerDay
+    await connection.query(`UPDATE rentals SET "returnDate"=$1,"delayFee"=$2 WHERE id=$3`,[currentDate,delayFee,exists.id])
     res.sendStatus(200)
+}
+
+export async function deleteRentals(req,res){
+    const {exists}=res.locals
+    if(!exists.returnDate) return res.sendStatus(400)
+    res.sendStatus(200)
+    await connection.query(`DELETE * FROM rentals WHERE id=$1`,[exists.id])
 }
     
