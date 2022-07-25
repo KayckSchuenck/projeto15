@@ -1,9 +1,12 @@
+import joi from 'joi'
+import connection from '../src/database.js'
+
 export async function validateCostumer(req,res,next){
     const schemaCustomers=joi.object({
         name: joi.string().required() ,
         phone: joi.string().min(10).max(11).required(),
         cpf: joi.string().length(11).required(),
-        birthday: joi.date().format("YYYY-MM-DD").required(),
+        birthday: joi.date().required(),
     })
     try{
         const validation=schemaCustomers.validate(req.body)

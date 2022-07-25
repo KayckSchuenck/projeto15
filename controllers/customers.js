@@ -18,7 +18,7 @@ export async function getCustomers(req,res){
 export async function getCustomersId(req,res){
   const {id}=req.params
   try{
-    const  customers = await connection.query('SELECT * FROM customers WHERE id=$1%',[id])
+    const customers = await connection.query('SELECT * FROM customers WHERE id=$1',[id])
     if (customers.rows.length===0) return res.sendStatus(404)
     res.send(customers.rows)
   } catch(e){
@@ -32,7 +32,7 @@ export async function postCustomers(req,res){
       await connection.query('INSERT INTO customers (name,phone,cpf,birthday) values ($1,$2,$3,$4)',[name,phone,cpf,birthday])
       res.sendStatus(201)
   } catch(e){
-      res.status(500).send('Erro com o servidor')
+    res.status(500).send('Erro com o servidor')
   } 
 }
 

@@ -3,12 +3,12 @@ import joi from 'joi'
 
 export async function getGames(req,res){
     const {name}=req.query
+    let games;
     try{
-      let games;
       if(!name){
-        games= await connection.query('SELECT games.*,category.name AS "categoryName" FROM games, JOIN category ON games."categoryId"=category.id')
+        games= await connection.query('SELECT games.*,categories.name AS "categoryName" FROM games JOIN categories ON categories.id=games."categoryId"')
       } else{
-        games= await connection.query('SELECT games.*,category.name AS "categoryName" FROM games, JOIN category ON games."categoryId"=category.id WHERE games.name LIKE "$1%"',[name])
+        games= await connection.query('SELECT games.*,categories.name AS "categoryName" FROM games JOIN categories ON categories.id=games."categoryId" WHERE games.name ILIKE "$1%"',[name])
       }
       res.send(games.rows)
     } catch(e){
@@ -30,10 +30,9 @@ export async function postGames(req,res){
         const {name,categoryId,image,stockTotal,pricePerDay}=req.body
         const nameAlreadyExists=await connection.query('SELECT * FROM games WHERE name=$1',[name])
         if(nameAlreadyExists.rows.length!==0) return res.sendStatus(409)
-        const allCategoryIds=await connection.query('SELECT id FROM categories')
-        const categoryExists=allCategoryIds.rows.filter(elem => elem===categoryId)
-        if(categoryExists.length===0) return res.sendStatus(400)
-        await connection.query('INSERT INTO games (name,image,stockTotal,categoryId,pricePerDay) values ($1,$2,$3,$4,$5)',[name,image,stockTotal,categoryId,pricePerDay])
+        const categoryExists=await connection.query('SELECT id FROM categories WHERE id=$1',[categoryId])
+        if(categoryExists.rows.length===0) return res.sendStatus(400)
+        await connection.query('INSERT INTO games (name,image,"stockTotal","categoryId","pricePerDay") VALUES ($1,$2,$3,$4,$5)',[name,image,stockTotal,categoryId,pricePerDay])
         res.sendStatus(201)
     } catch(e){
         res.status(500).send('Erro com o servidor')

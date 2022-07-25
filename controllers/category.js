@@ -2,8 +2,6 @@ import connection from "../src/database.js";
 
 export async function getCategory(req,res){
   try{
-    const {name}=req.body
-    if(!name) res.sendStatus(400)
     const category = await connection.query('SELECT * FROM categories')
     res.send(category.rows)
   } catch(e){

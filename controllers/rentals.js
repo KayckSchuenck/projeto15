@@ -1,6 +1,5 @@
 import connection from '../src/database.js'
 import joi from 'joi';
-import dayjs from 'dayjs';
 
 export async function getRentals(req,res){
     const {customerId,gameId}=req.query
@@ -8,25 +7,43 @@ export async function getRentals(req,res){
     try{
         if(customerId&&gameId) {
             rentals= await connection.query(`
-            SELECT rentals.*,customers.name AS "customerName",games.name AS "gameName",games."categoryId",categories.name AS "categoryName" FROM rentals JOIN customers ON customers.id=rentals."customerId" JOIN games ON games.id=rentals."gameId" JOIN categories ON categories.id=games."categoryId" WHERE gameId=$1 AND customerId=$2
+            SELECT rentals.*,customers.name AS "customerName",games.name AS "gameName",games."categoryId",categories.name AS "categoryName" 
+            FROM rentals 
+            JOIN customers ON customers.id=rentals."customerId" 
+            JOIN games ON games.id=rentals."gameId" 
+            JOIN categories ON categories.id=games."categoryId" 
+            WHERE "gameId"=$1 AND "customerId"=$2
             `,[gameId,customerId])
         }
         if(gameId&&!customerId){
             rentals= await connection.query(`
-            SELECT rentals.*,customers.name AS "customerName",games.name AS "gameName",games."categoryId",categories.name AS "categoryName" FROM rentals JOIN customers ON customers.id=rentals."customerId" JOIN games ON games.id=rentals."gameId" JOIN categories ON categories.id=games."categoryId" WHERE gameId=$1
+            SELECT rentals.*,customers.name AS "customerName",games.name AS "gameName",games."categoryId",categories.name AS "categoryName" 
+            FROM rentals 
+            JOIN customers ON customers.id=rentals."customerId" 
+            JOIN games ON games.id=rentals."gameId" 
+            JOIN categories ON categories.id=games."categoryId" 
+            WHERE "gameId"=$1
             `,[gameId])
         }
         if(!gameId&&customerId){
             rentals= await connection.query(`
-            SELECT rentals.*,customers.name AS "customerName",games.name AS "gameName",games."categoryId",categories.name AS "categoryName" FROM rentals JOIN customers ON customers.id=rentals."customerId" JOIN games ON games.id=rentals."gameId" JOIN categories ON categories.id=games."categoryId" WHERE customerId=$1
+            SELECT rentals.*,customers.name AS "customerName",games.name AS "gameName",games."categoryId",categories.name AS "categoryName" 
+            FROM rentals 
+            JOIN customers ON customers.id=rentals."customerId" 
+            JOIN games ON games.id=rentals."gameId" 
+            JOIN categories ON categories.id=games."categoryId" 
+            WHERE "customerId"=$1
             `,[customerId])
         }
         if(!gameId&&!customerId){
             rentals= await connection.query(`
-            SELECT rentals.*,customers.name AS "customerName",games.name AS "gameName",games."categoryId",categories.name AS "categoryName" FROM rentals JOIN customers ON customers.id=rentals."customerId" JOIN games ON games.id=rentals."gameId" JOIN categories ON categories.id=games."categoryId"
+            SELECT rentals.*,customers.name AS "customerName",games.name AS "gameName",games."categoryId",categories.name AS "categoryName" 
+            FROM rentals 
+            JOIN customers ON customers.id=rentals."customerId" 
+            JOIN games ON games.id=rentals."gameId" 
+            JOIN categories ON categories.id=games."categoryId"
             `)
         }
-        
         const joinRentals=rentals.rows.map(elem=> {
             return {
                 ...elem,
@@ -50,6 +67,7 @@ export async function getRentals(req,res){
         })
         res.send(joinRentals)
     } catch(e){
+        console.log(e)
         res.status(500).send('Erro com o servidor')
     } 
 }
@@ -67,14 +85,13 @@ export async function postRentals(req,res){
         const {rows:customerExists}=await connection.query(`
         SELECT id FROM customers WHERE id=$1`,[customerId])
         const {rows:gameQuery}=await connection.query(`
-        SELECT id,pricePerDay,stockTotal FROM games WHERE id=$1`,[gameId])
+        SELECT id,"pricePerDay","stockTotal" FROM games WHERE id=$1`,[gameId])
         if(gameQuery.length===0||customerExists.length===0) return res.sendStatus(400)
         const {rows:numberRentals}=await connection.query(`
         SELECT * FROM rentals WHERE "gameId"=$1`,[gameQuery[0].id])
         if(numberRentals.length>=gameQuery[0].stockTotal) return res.sendStatus(400)
         const originalPrice=daysRented*gameQuery[0].pricePerDay
-        const rentDate=dayjs().format("YYYY-MM-DD")
-        await connection.query(`INSERT INTO rentals (customerId,gameId,rentDate,daysRented,returnDate,originalPrice,delayFee) VALUES ($1,$2,$3,$4,$5,$6,$7)`,[customerId,gameId,rentDate,daysRented,null,originalPrice,null])
+        await connection.query(`INSERT INTO rentals ("customerId","gameId","rentDate","daysRented","returnDate","originalPrice","delayFee") VALUES ($1,$2,NOW(),$3,null,$4,null)`,[customerId,gameId,daysRented,originalPrice])
         res.sendStatus(201)
     } catch(e){
         res.status(500).send('Erro com o servidor')
@@ -82,19 +99,28 @@ export async function postRentals(req,res){
 }
 
 export async function finishRentals(req,res){
-    const {exists}=res.locals
-    if(exists.returnDate) return res.sendStatus(400)
-    const currentDate=dayjs().format("YYYY-MM-DD")
-    const pricePerDay=exists.originalPrice/exists.daysRented
-    const delayFee=exists.rentDate.diff(currentDate,'day')*pricePerDay
-    await connection.query(`UPDATE rentals SET "returnDate"=$1,"delayFee"=$2 WHERE id=$3`,[currentDate,delayFee,exists.id])
-    res.sendStatus(200)
+    try{
+        const {exists:returnRental}=res.locals
+        if(returnRental.returnDate) return res.sendStatus(400)
+        const difference = new Date().getTime() - new Date(returnRental.rentDate).getTime();
+        const resultDays = Math.floor(difference / (24 * 3600 * 1000));
+        const pricePerDay=returnRental.originalPrice/returnRental.daysRented
+        const delayFee=resultDays*pricePerDay
+        await connection.query(`UPDATE rentals SET "returnDate"=NOW(),"delayFee"=$1 WHERE id=$2`,[delayFee,returnRental.id])
+        res.sendStatus(200)
+    } catch(e){
+        res.status(500).send('Erro com o servidor')
+    } 
 }
 
 export async function deleteRentals(req,res){
-    const {exists}=res.locals
-    if(!exists.returnDate) return res.sendStatus(400)
-    res.sendStatus(200)
-    await connection.query(`DELETE * FROM rentals WHERE id=$1`,[exists.id])
+    try{
+        const {exists}=res.locals
+        if(!exists.returnDate) return res.sendStatus(400)
+        res.sendStatus(200)
+        await connection.query(`DELETE FROM rentals WHERE id=$1`,[exists.id])
+    } catch(e){
+        res.status(500).send('Erro com o servidor')
+    } 
 }
     
